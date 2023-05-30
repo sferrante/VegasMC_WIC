@@ -1,9 +1,12 @@
 import numpy as np
+from numpy import random
 import matplotlib.pyplot as plt
 import vegas
 from functools import partial 
 import WIC_Pheno_Formulae as WIC
 from WIC_Pheno_Formulae import *
+
+hbar = 6.58*10**(-16)*10**(-9)   ## GeV*s
 
 #******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#
 ####################################################### VEGAS INTEGRATION #####################################################
@@ -23,7 +26,10 @@ def run_MC_dσ_dμdμp(NPoints, sqrtS, μ0, μϼ):
     integral = 0.0
     integ = vegas.Integrator([[μ0, sqrtS-μ0], [μ0, sqrtS-μ0]])
 #     NPoints_d3σ = 50000
-    integ(d2σ_dμ1dμ1p_v, nitn=10, neval=NPoints, alpha=0.0005) ############# train !
+    result = integ(d2σ_dμ1dμ1p_v, nitn=10, neval=NPoints, alpha=0.0005) ############# train !
+    result_error = result.sdev 
+    result_integral = result.mean
+#     print(result_integral, result_error)
     μ1_σ_hist = []; μ1p_σ_hist = [];
     y_histo = []; wgt_array = []; hcube_histo = [];
     for x, y, wgt, hcube in integ.random(yield_hcube=True, yield_y=True):
@@ -31,7 +37,7 @@ def run_MC_dσ_dμdμp(NPoints, sqrtS, μ0, μϼ):
         μ1_σ_hist.append(x[0])
         μ1p_σ_hist.append(x[1])
         y_histo.append(y[0])
-        hcube_histo.append(hcube)
+        hcube_histo.append(hcube)  ## hcube is the *index/label* of the hypercube that the point is in
         integral += wgt * d2σ_dμ1dμ1p_v(x)
     print(np.shape(μ1_σ_hist), np.shape(μ1p_σ_hist))
     ################# Rescaling Weights & Cutting Events Probabilistically ################
@@ -49,12 +55,68 @@ def run_MC_dσ_dμdμp(NPoints, sqrtS, μ0, μϼ):
     rescaled_raw_histo_boolean = rescaled_raw_weights>my_random_numbers
     rescaled_μ1_σ_hist = np.array(μ1_σ_hist)[rescaled_raw_histo_boolean]
     rescaled_μ1p_σ_hist = np.array(μ1p_σ_hist)[rescaled_raw_histo_boolean]
+    print('shape of raw hist = ' + str(np.shape(μ1_σ_hist)))
+    print('shape of rescaled hist = ' + str(np.shape(rescaled_μ1_σ_hist)))
+    print('Unweighting Efficiency(?) = ' + str(np.shape(rescaled_μ1_σ_hist)[0]/np.shape(μ1_σ_hist)[0]))
     #######################################################################################
     print('Returning μ1, μ1p Events, Integral')
     return {"μ1 Events": rescaled_μ1_σ_hist, 
-            "μ1p Events": rescaled_μ1p_σ_hist, "Integral":  integral, 
+            "μ1p Events": rescaled_μ1p_σ_hist, 
+            "Integral":  integral, 
             "All Events": np.transpose(np.array([rescaled_μ1_σ_hist, 
-                                                 rescaled_μ1p_σ_hist])) }
+                                                 rescaled_μ1p_σ_hist])),
+            "Error":  result_error }
+
+
+#######################################################
+##################   e+e- --> μ1μ1'  ##################
+##################      d2σ_cosθ     #################
+##################     with VEGAS    ##################
+#######################################################
+def run_MC_dσ_dcosθ(NPoints):
+    print('Running dσ/dcosθ MC ... ')
+    ############################ Functions ########################## 
+    dσ_dcosθ_weights = partial(WIC.dσ_dcosθ)
+    dσ_dcosθ_v = partial(WIC.dσ_dcosθ_v)
+    ########################## Training Vegas ... ################################
+    integral = 0.0
+    integ = vegas.Integrator([[-1, 1]])
+    result = integ(dσ_dcosθ_v, nitn=10, neval=NPoints, alpha=0.0005) ############# train !
+    result_error = result.sdev 
+    result_integral = result.mean
+#     print(result_integral, result_error)
+    cosθ_σ_hist = []; 
+    y_histo = []; wgt_array = []; hcube_histo = [];
+    for x, y, wgt, hcube in integ.random(yield_hcube=True, yield_y=True):
+        wgt_array.append(1/wgt)
+        cosθ_σ_hist.append(x[0])
+        y_histo.append(y[0])
+        hcube_histo.append(hcube)
+        integral += wgt * dσ_dcosθ_v(x)
+    print(np.shape(cosθ_σ_hist))
+    ################# Rescaling Weights & Cutting Events Probabilistically ################
+    hcube_counter = []
+    for i in range(max(hcube_histo)+1):          ## Loops thru hypercubes
+        if i%5000==0: print(str(i) + ' of ' + str(max(hcube_histo)+1))
+        count = np.sum(np.array(hcube_histo)==i) ## Define count = number of points in hypercube i
+        temp = np.full((count), count)           ## Define temp = [count, count, ... ('count' times)]
+        hcube_counter = np.append(hcube_counter, temp)
+        hcube_counter.flatten()
+    prob = np.array(hcube_counter)/(len(cosθ_σ_hist))
+    raw_weights = np.array(list(map(dσ_dcosθ_weights, cosθ_σ_hist))) / (prob)
+    rescaled_raw_weights = raw_weights/max(raw_weights)
+    my_random_numbers = np.random.uniform(low=0, high=1, size=len(rescaled_raw_weights))
+    rescaled_raw_histo_boolean = rescaled_raw_weights>my_random_numbers
+    rescaled_cosθ_σ_hist = np.array(cosθ_σ_hist)[rescaled_raw_histo_boolean]
+    print(np.shape(cosθ_σ_hist))
+    print(np.shape(rescaled_cosθ_σ_hist))
+    #######################################################################################
+    print('Returning cosθ Events, Integral')
+#     print(integral)
+    return {"cosθ Events": rescaled_cosθ_σ_hist, 
+            "Integral":  integral, 
+            "All Events": np.transpose(np.array([rescaled_cosθ_σ_hist])),
+            "Error":  result_error }
 
 
 #######################################################
@@ -103,17 +165,46 @@ def run_MC_dΓ2_dμ2(NPoints, μ1, μ0, μϼ):
     #######################################################################
     
 
+
+## Find Closest Element
+def ClosestElement(x, a):
+    differences = np.array(a)-x
+    AbsDifferences = abs(differences)
+    ClosestIndex = np.where(AbsDifferences == min(AbsDifferences))[0][0]
+    ClosestEl = a[ClosestIndex]
+    return ClosestEl
+## Determine Δm
+def Δm(m, MassSpec):
+    CloseM = ClosestElement(m,MassSpec)
+    CloseMIndex = np.where(MassSpec == CloseM)[0][0]
+    if CloseMIndex!=0:
+        dm = CloseM - MassSpec[CloseMIndex-1]
+    else:
+        dm = abs(CloseM - MassSpec[CloseMIndex+1])
+    return dm
+## Determine Δm2
+def Δm2(m, MassSpec):
+    CloseM = ClosestElement(m,MassSpec)
+    CloseMIndex = np.where(MassSpec == CloseM)[0][0]
+    MassSqSpec = MassSpec**2
+    if CloseMIndex!=0:
+        dm2 = MassSqSpec[CloseMIndex] - MassSqSpec[CloseMIndex-1]
+#         dm = CloseM - MassSpectrum[CloseMIndex-1]
+    else:
+#         dm = abs(CloseM - MassSpectrum[CloseMIndex+1])
+        dm2 = abs(MassSqSpec[CloseMIndex] - MassSqSpec[CloseMIndex+1])
+    return dm2
 ##########################################################
 #################  μ1 --> f3 + f4 + μ2  ##################
 #################     d3Γ_dμ2dx3dx4     ##################
 #################      with VEGAS       ##################
 ##########################################################
-def run_MC_dΓ3_dμ2(NPoints, μ1, μ0, μϼ):
+def run_MC_dΓ3_dμ2(NPoints, μ1, μ0, μϼ, Δm2):
     μ1_temporary = μ1
     print('Running dΓ3/dμ2 MC for μ1 = ' + str(μ1_temporary) + ' ... ')
-    ############################ Functions ########################## 
-    d3Γ3_dμ2dx3dx4_weights = partial(WIC.d3Γ3_dμ2dx3dx4, μ1=μ1_temporary, μ0=μ0, μϼ=μϼ)
-    d3Γ3_dμ2dx3dx4_v = partial(WIC.d3Γ3_dμ2dx3dx4_v, μ1=μ1_temporary, μ0=μ0, μϼ=μϼ)
+    ######################################## Integrands ################################## 
+    d3Γ3_dμ2dx3dx4_weights = partial(WIC.d3Γ3_dμ2dx3dx4, μ1=μ1_temporary, μ0=μ0, μϼ=μϼ, Δm2=Δm2)
+    d3Γ3_dμ2dx3dx4_v = partial(WIC.d3Γ3_dμ2dx3dx4_v, μ1=μ1_temporary, μ0=μ0, μϼ=μϼ, Δm2=Δm2)
     ################################### Training Vegas ... #########################################
     integral_Γ3 = 0.0
     integral_Γ3_piece = 0.0
@@ -158,7 +249,73 @@ def run_MC_dΓ3_dμ2(NPoints, μ1, μ0, μϼ):
             "x4 Events":  rescaled_x4_Γ3_hist, "Integral": integral_Γ3,
             "All Events": np.transpose(np.array([rescaled_μ2_Γ3_hist,
                                                  rescaled_x3_Γ3_hist,
-                                                 rescaled_x4_Γ3_hist])) } 
+                                                 rescaled_x4_Γ3_hist])) }
+
+
+#######################################################
+##################     e+e- --> γμ1μ1'    #############
+##################  d4σ_deγdcosθγdμ1dμ1p  #############
+##################       with VEGAS       #############
+#######################################################
+def run_MC_dσ_deγdcosθγdμdμp(NPoints, sqrtS, μ0, μϼ):
+    print('Running dσ/deγdcosθγdμdμp MC for √s = ' + str(sqrtS) + ' ... ')
+    ############################ Functions ########################## 
+    d4σ_deγdcosθγdμ1dμ1p_weights = partial(WIC.d4σ_deγdcosθγdμ1dμ1p, sqrtS=sqrtS, μ0=μ0, μϼ=μϼ)
+    d4σ_deγdcosθγdμ1dμ1p_v = partial(WIC.d4σ_deγdcosθγdμ1dμ1p_v, sqrtS=sqrtS, μ0=μ0, μϼ=μϼ)
+    ########################## Training Vegas ... ################################
+    integral = 0.0
+#     θc=0.01
+#     eγc=5
+    integ = vegas.Integrator([[μ0, sqrtS], [μ0, sqrtS], [0, sqrtS], [-1, 1]])
+#     NPoints_d3σ = 50000
+    result = integ(d4σ_deγdcosθγdμ1dμ1p_v, nitn=100, neval=NPoints, alpha=0.005) ############# train !
+    result_error = result.sdev 
+    result_integral = result.mean
+#     print(result_integral, result_error)
+    μ1_σ_hist = []; μ1p_σ_hist = []; eγ_σ_hist = []; cosθγ_σ_hist = [];
+    y_histo = []; wgt_array = []; hcube_histo = [];
+    for x, y, wgt, hcube in integ.random(yield_hcube=True, yield_y=True):
+        wgt_array.append(1/wgt)
+        μ1_σ_hist.append(x[0]) 
+        μ1p_σ_hist.append(x[1])
+        eγ_σ_hist.append(x[2])
+        cosθγ_σ_hist.append(x[3])
+        y_histo.append(y[0])
+        hcube_histo.append(hcube)
+        integral += wgt * d4σ_deγdcosθγdμ1dμ1p_v(x)
+    print(np.shape(μ1_σ_hist), np.shape(μ1p_σ_hist), np.shape(eγ_σ_hist), np.shape(cosθγ_σ_hist))
+    ################# Rescaling Weights & Cutting Events Probabilistically ################
+    hcube_counter = []
+    for i in range(max(hcube_histo)+1):          ## Loops thru hypercubes
+        if i%5000==0: print(str(i) + ' of ' + str(max(hcube_histo)+1))
+        count = np.sum(np.array(hcube_histo)==i) ## Define count = number of points in hypercube i
+        temp = np.full((count), count)           ## Define temp = [count, count, ... ('count' times)]
+        hcube_counter = np.append(hcube_counter, temp)
+        hcube_counter.flatten()
+    prob = np.array(hcube_counter)/(len(μ1_σ_hist))
+    raw_weights = np.array(list(map(d4σ_deγdcosθγdμ1dμ1p_weights, μ1_σ_hist, μ1p_σ_hist, eγ_σ_hist, cosθγ_σ_hist))) / (prob)
+    rescaled_raw_weights = raw_weights/max(raw_weights)
+    my_random_numbers = np.random.uniform(low=0, high=1, size=len(rescaled_raw_weights))
+    rescaled_raw_histo_boolean = rescaled_raw_weights>my_random_numbers
+    rescaled_μ1_σ_hist = np.array(μ1_σ_hist)[rescaled_raw_histo_boolean]
+    rescaled_μ1p_σ_hist = np.array(μ1p_σ_hist)[rescaled_raw_histo_boolean]
+    rescaled_eγ_σ_hist = np.array(eγ_σ_hist)[rescaled_raw_histo_boolean]
+    rescaled_cosθγ_σ_hist = np.array(cosθγ_σ_hist)[rescaled_raw_histo_boolean]
+    print(np.shape(μ1_σ_hist))
+    print(np.shape(rescaled_μ1_σ_hist))
+    #######################################################################################
+    print('Returning μ1, μ1p Events, eγ Events, cosθγ Events, Integral')
+#     print(integral)
+    return {"μ1 Events": rescaled_μ1_σ_hist, 
+            "μ1p Events": rescaled_μ1p_σ_hist, 
+            "eγ Events": rescaled_eγ_σ_hist,
+            "cosθγ Events": rescaled_cosθγ_σ_hist,
+            "Integral":  integral, 
+            "All Events": np.transpose(np.array([rescaled_μ1_σ_hist, 
+                                                 rescaled_μ1p_σ_hist,
+                                                 rescaled_eγ_σ_hist, 
+                                                 rescaled_cosθγ_σ_hist])),
+            "Error":  result_error }
 
 
 #******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#******#
@@ -224,7 +381,7 @@ def a_scale_mff(μ1_actual, p3x, p3y, p3z, p4x, p4y, p4z, E3, E4, μ2_rescaled):
 #################################################
 ########### ALL KINEMATICS FOR DECAYS ###########
 #################################################
-def FinalState2body_FVs(μ1, μ1_actual, μ2, prime):   
+def FinalState2body_FVs(μ1, μ1_actual, μ2, prime):   ### (2-body isn't really used...) 
         ## Random angles ## 
         φ1 = np.random.uniform(low=0.0, high=2*np.pi)
         θ1 = np.random.uniform(low=0.0, high=  np.pi)
@@ -290,7 +447,21 @@ def FinalState2body_FVs(μ1, μ1_actual, μ2, prime):
             MC_Events_p2axp.append(p2a_mu[1]); MC_Events_p2bxp.append(p2b_mu[1]);
             MC_Events_p2ayp.append(p2a_mu[2]); MC_Events_p2byp.append(p2b_mu[2]);
             MC_Events_p2azp.append(p2a_mu[3]); MC_Events_p2bzp.append(p2b_mu[3]);
-def FinalState3body_FVs(μ1, μ1_actual, μ2, x3, x4, prime, n, temp_event, threshold):
+def FinalState3body_FVs(μ1, μ1_actual, prime, n, temp_event, threshold, Γ3_interp, μ2x3x4_Γ3_hist):
+        ################################## 
+        ## Sample a random (μ2, x3, x4) ##
+        ####################################
+#         μ2x3x4_Γ3_hist = d3Γ3_ds[IndOfM(μ1)]['All Events']
+        random_int = random.randint(0,len(μ2x3x4_Γ3_hist))
+        μ2 = μ2x3x4_Γ3_hist[random_int][0]
+        x3 = μ2x3x4_Γ3_hist[random_int][1]
+        x4 = μ2x3x4_Γ3_hist[random_int][2]
+#         if μ2 > 103: Γ3_integral = Γ3_interp(μ2)
+#         else :       Γ3_integral = 0
+#         print('μ2 is: ' + str(μ2))
+        ####################################
+        ## Kinematics ## 
+        ####################################
         ### Random angles ### 
         φ1 = np.random.uniform(low=0.0, high=2*np.pi)
         θ1 = np.random.uniform(low=0.0, high=  np.pi)
@@ -384,36 +555,63 @@ def FinalState3body_FVs(μ1, μ1_actual, μ2, x3, x4, prime, n, temp_event, thre
         if 0.54589 < pickanumberanynumber < 0.70189: fermionPID = 1  # d
         if 0.70189 < pickanumberanynumber < 0.85789: fermionPID = 3  # s
         if 0.85789 < pickanumberanynumber < 1      : fermionPID = 5  # b
-        if μ2_rescaled > threshold: decay = 1
-        if μ2_rescaled < threshold: decay = 0
+        if μ2_rescaled > threshold: 
+            decay = 1
+            τ = hbar/Γ3_interp(μ2_rescaled)
+        if μ2_rescaled < threshold: 
+            decay = 0
+            τ = np.inf
         if prime==False:
             temp_event.append(['PID' + str(n+1),       1000000, μ2_rescaled, 
                                p2_mu_BoostVn[0], p2_mu_BoostVn[1], 
-                               p2_mu_BoostVn[2], p2_mu_BoostVn[3], decay])
+                               p2_mu_BoostVn[2], p2_mu_BoostVn[3], decay, τ])
             temp_event.append(['PID' + str(n+1) + 'a',  fermionPID, 0, 
                                p2a_mu_BoostVn[0], p2a_mu_BoostVn[1], 
-                               p2a_mu_BoostVn[2], p2a_mu_BoostVn[3], 0])
+                               p2a_mu_BoostVn[2], p2a_mu_BoostVn[3], 0, np.inf])
             temp_event.append(['PID' + str(n+1) + 'b', -fermionPID, 0, 
                                p2b_mu_BoostVn[0], p2b_mu_BoostVn[1],
-                               p2b_mu_BoostVn[2], p2b_mu_BoostVn[3], 0])
+                               p2b_mu_BoostVn[2], p2b_mu_BoostVn[3], 0, np.inf])
         if prime==True:
             temp_event.append(['PID' + str(n+1) + 'p', 1000000, μ2_rescaled, 
                                p2_mup_BoostVn[0], p2_mup_BoostVn[1], 
-                               p2_mup_BoostVn[2], p2_mup_BoostVn[3], decay])
+                               p2_mup_BoostVn[2], p2_mup_BoostVn[3], decay, τ])
             temp_event.append(['PID' + str(n+1) + 'ap',  fermionPID, 0, 
                                p2a_mup_BoostVn[0], p2a_mup_BoostVn[1], 
-                               p2a_mup_BoostVn[2], p2a_mup_BoostVn[3], 0])
+                               p2a_mup_BoostVn[2], p2a_mup_BoostVn[3], 0, np.inf])
             temp_event.append(['PID' + str(n+1) + 'bp', -fermionPID, 0, 
                                p2b_mup_BoostVn[0], p2b_mup_BoostVn[1],
-                               p2b_mup_BoostVn[2], p2b_mup_BoostVn[3], 0])
+                               p2b_mup_BoostVn[2], p2b_mup_BoostVn[3], 0, np.inf])
 
-            
-def sample(μ1, μ1_actual, body, prime, n, temp_event, threshold):
-    ## Sample μ2, x3, x4 ##
-    μ2x3x4_Γ3_hist = eval('d3Γ3_dμ2dx3dx4_μ1_' + str(μ1) + '_dict')['All Events']
-    random_int = random.randint(0,len(μ2x3x4_Γ3_hist))
-    μ2 = μ2x3x4_Γ3_hist[random_int][0]
-    x3 = μ2x3x4_Γ3_hist[random_int][1]
-    x4 = μ2x3x4_Γ3_hist[random_int][2]
-    ## Compute 4-Vectors ##
-    FinalState3body_FVs(μ1, μ1_actual, μ2, x3, x4, prime, temp_event, threshold)
+
+def ProductionFVs(μ1_sample, μ1p_sample, cosθ_sample, temp_event, prime, threshold, Γ3_int, s):
+    ## Random Angles
+    φ0 = np.random.uniform(low=0.0, high=2*np.pi)
+    θ0 = cosθ_sample
+    ## Energy
+    E1 = (s + μ1_sample**2 - μ1p_sample**2)/(2*np.sqrt(s))
+    E1p = (s + μ1p_sample**2 - μ1_sample**2)/(2*np.sqrt(s))
+    if prime==False:
+        if μ1_sample > threshold: 
+            decay = 1
+            print('μ1_sample is ' + str(μ1_sample))
+            τ = hbar/Γ3_int(μ1_sample)
+        if μ1_sample < threshold: 
+            decay = 0
+            τ = np.inf
+        temp_event.append(['PID1', 1000000, μ1_sample, E1,
+                        np.sqrt(E1**2 - μ1_sample**2)*np.sin(θ0)*np.cos(φ0),
+                        np.sqrt(E1**2 - μ1_sample**2)*np.sin(θ0)*np.sin(φ0),
+                        np.sqrt(E1**2 - μ1_sample**2)*np.cos(θ0), decay, τ])
+    if prime==True:
+        if μ1p_sample > threshold: 
+            decay = 1
+            τ = hbar/Γ3_int(μ1p_sample)
+        if μ1p_sample < threshold: 
+            decay = 0
+            τ = np.inf
+        temp_event.append(['PID1p', 1000000, μ1p_sample, E1p,
+                        np.sqrt(E1p**2 - μ1p_sample**2)*np.sin(θ0)*np.cos(φ0),
+                        np.sqrt(E1p**2 - μ1p_sample**2)*np.sin(θ0)*np.sin(φ0),
+                        np.sqrt(E1p**2 - μ1p_sample**2)*np.cos(θ0), decay, τ])
+        
+        
