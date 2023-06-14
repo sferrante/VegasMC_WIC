@@ -23,11 +23,11 @@ class Plotter:
         PlotCount=-1;
         for d in range(len(dictionaryList)):
         ## looping through projections 'i' ##
-            EventCount=0;  
+            ProjectionCount=0;  
             for i in range(NProjections[d]):
-                events = list(dictionaryList[d].items())[EventCount][1]
+                events = np.transpose(dictionaryList[d]['x Events'])[ProjectionCount]
                 PlotCount+=1
-                EventCount+=1
+                ProjectionCount+=1
                 integral = dictionaryList[d]['Integral']
                 ## if there's 1 projection, there's just one 'ax', else 'ax[0,1,..]'
                 if np.sum(NProjections)==1: plot=self.ax
