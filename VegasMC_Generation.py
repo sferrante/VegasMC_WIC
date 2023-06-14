@@ -174,7 +174,7 @@ def FinalState3body_FVs(μ1, μ1_actual, prime, n, temp_event, threshold, Γ3_in
         p2b_mu = np.array([
             E4, -E4*np.sin(np.pi/2 + y), 0, E4*np.cos(np.pi/2 + y)
         ])
-#         ### Rotate p2a, p2b by θ1, φ1 ###            ### still don't know if this is necessary or not .....
+#         ### Rotate p2a, p2b by θ1, φ1 ###            
 #         p2a_mu = np.dot(Rotate(θ1, φ1), p2a_mu)      ### is a() a function of rest frame things..? 
 #         p2b_mu = np.dot(Rotate(θ1, φ1), p2b_mu)
 #         # Boost too .. ?? ## 
