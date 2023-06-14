@@ -1,5 +1,5 @@
 # VegasMC_WIC
-Monte Carlo generator for weakly-interacting near-continuum dark matter 
+Monte Carlo generator for weakly-interacting near-continuum dark matter. Based off the Benchmark Point defined in arXiv.2306.xxxxx. 
 
 Necessary packages are: 
 
