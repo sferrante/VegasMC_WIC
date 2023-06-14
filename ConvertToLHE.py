@@ -2,11 +2,12 @@
 import numpy as np
 
 c = 3 * 10**8   
-def arr_to_MyLHE(filename, array, dictionary):
+def arr_to_MyLHE(filename, array, dictionaries):
     with open(filename + '.mylhe', 'w') as f:
         f.write('<MGGenerationInfo>')
         f.write('\n#  Number of Events        :      %i'%len(array))
-        f.write('\n#  Integrated weight (ab)  :      %f'%dictionary['Integral'])
+        integral = dictionaries[0]['Integral']*dictionaries[1]['Integral']
+        f.write('\n#  Integrated weight (ab)  :      %f'%integral)
         f.write('\n</MGGenerationInfo>')
         f.write('\n</header>')
         f.write('\n<init>')
@@ -47,11 +48,12 @@ def arr_to_MyLHE(filename, array, dictionary):
 #             f.write('</event>\n')
                 
             
-def arr_to_LHE_temp(filename, array, dictionary):
+def arr_to_LHE_temp(filename, array, dictionaries):
     with open(filename + '.lhe_temp', 'w') as f:
         f.write('\n<MGGenerationInfo>')
         f.write('\n#  Number of Events        :      %i'%len(array))
-        f.write('\n#  Integrated weight (ab)  :      %f'%dictionary['Integral'])
+        integral = dictionaries[0]['Integral']*dictionaries[1]['Integral']
+        f.write('\n#  Integrated weight (ab)  :      %f'%integral)
         f.write('\n</MGGenerationInfo>')
         f.write('\n</header>')
         f.write('\n<init>')
@@ -67,9 +69,9 @@ def arr_to_LHE_temp(filename, array, dictionary):
                      -4,                                                         # Weight ID
                       1                                                      ))  # NPR
         f.write('\n {0} {1} {2} {3}'.format(
-                     np.format_float_scientific(dictionary['Integral'], 6, min_digits=6, sign=False), # XSEC                                                        # XSEC
-                     np.format_float_scientific(dictionary['Error']   , 6, min_digits=6, sign=False), # XERR                                                     # XERR
-                     np.format_float_scientific(dictionary['Integral'], 6, min_digits=6, sign=False), # XMAX
+                     np.format_float_scientific(integral, 6, min_digits=6, sign=False), # XSEC                                                        # XSEC
+                     np.format_float_scientific(dictionaries[0]['Error'], 6, min_digits=6, sign=False), # XERR                                                     # XERR
+                     np.format_float_scientific(integral, 6, min_digits=6, sign=False), # XMAX
                       1                                                                  ))           # LPR
         f.write('\n<generator name=\'VegasMC_WIC\' version=\'0.0.0\'> please cite ...')
         f.write('\n</init>\n')
